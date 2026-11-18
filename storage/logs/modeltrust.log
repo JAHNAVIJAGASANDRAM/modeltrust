@@ -1,0 +1,25 @@
+2026-11-18 15:23:19 | INFO     | modeltrust.policy | Policy decision=REJECT risk=CRITICAL violations=1
+2026-11-18 15:23:23 | WARNING  | modeltrust.dependency.vuln | OSV API unreachable: HTTPSConnectionPool(host='api.osv.dev', port=443): Max retries exceeded with url: /v1/querybatch (Caused by NameResolutionError("HTTPSConnection(host='api.osv.dev', port=443): Failed to resolve 'api.osv.dev' ([Errno 11001] getaddrinfo failed)"))
+2026-11-18 15:24:07 | INFO     | modeltrust.policy | Policy decision=REJECT risk=CRITICAL violations=1
+2026-11-18 15:24:20 | INFO     | modeltrust.policy | Policy decision=REJECT risk=CRITICAL violations=1
+2026-11-18 15:24:21 | INFO     | modeltrust.policy | Policy decision=REJECT risk=CRITICAL violations=1
+2026-11-18 15:24:21 | INFO     | modeltrust.policy | Policy decision=REVIEW risk=MEDIUM violations=1
+2026-11-18 15:24:21 | INFO     | modeltrust.database | SQLite database initialized at C:\Users\sriya\AppData\Local\Temp\tmpd743__bi\test_modeltrust.db
+2026-11-18 15:24:21 | INFO     | modeltrust.certification | Generating new organizational RSA-2048 signing key pair in C:\Users\sriya\Desktop\Major Project\modeltrust\storage\certificates\keys
+2026-11-18 15:24:22 | INFO     | modeltrust.policy | Policy decision=REVIEW risk=MEDIUM violations=1
+2026-11-18 15:24:22 | INFO     | modeltrust.policy | Policy decision=APPROVE risk=LOW violations=0
+2026-11-18 15:24:22 | INFO     | modeltrust.certification | Issued certificate MTCERT-C713DC36D14B for assessment MT-TEST-CLEAN
+2026-11-18 15:24:22 | INFO     | modeltrust.registry | Admitted artifact_id=1 (trusted-org/clean-model) into Trusted AI Artifact Registry
+2026-11-18 15:24:22 | INFO     | modeltrust.reporting | Generated PDF security report: C:\Users\sriya\Desktop\Major Project\modeltrust\storage\reports\ModelTrust_Report_MT-TEST-CLEAN.pdf
+2026-11-18 15:24:22 | INFO     | modeltrust.policy | Policy decision=REJECT risk=CRITICAL violations=2
+2026-11-18 15:24:47 | INFO     | modeltrust.database | SQLite database initialized at C:\Users\sriya\Desktop\Major Project\modeltrust\database\modeltrust.db
+2026-11-18 15:24:48 | INFO     | modeltrust.database | SQLite database initialized at C:\Users\sriya\Desktop\Major Project\modeltrust\database\modeltrust.db
+2026-11-18 15:25:50 | INFO     | modeltrust.acquisition | Acquiring github repository pallets/markupsafe into C:\Users\sriya\Desktop\Major Project\modeltrust\storage\downloaded_repositories\MT-20261118-C08FF9_github_pallets_markupsafe
+2026-11-18 15:25:59 | INFO     | modeltrust.policy | Policy decision=REVIEW risk=MEDIUM violations=3
+2026-11-18 15:25:59 | INFO     | modeltrust.reporting | Generated PDF security report: C:\Users\sriya\Desktop\Major Project\modeltrust\storage\reports\ModelTrust_Report_MT-20261118-C08FF9.pdf
+2026-11-18 15:26:35 | INFO     | modeltrust.acquisition | Acquiring huggingface repository hf-internal-testing/tiny-random-BertModel into C:\Users\sriya\Desktop\Major Project\modeltrust\storage\downloaded_repositories\MT-20261118-29AA03_huggingface_hf-internal-testing_tiny-random-BertModel
+2026-11-18 15:26:52 | INFO     | modeltrust.policy | Policy decision=REVIEW risk=MEDIUM violations=3
+2026-11-18 15:26:52 | INFO     | modeltrust.reporting | Generated PDF security report: C:\Users\sriya\Desktop\Major Project\modeltrust\storage\reports\ModelTrust_Report_MT-20261118-29AA03.pdf
+2026-11-18 15:32:03 | INFO     | modeltrust.acquisition | Acquiring github repository security-pride/MalHug into C:\Users\sriya\Desktop\Major Project\modeltrust\storage\downloaded_repositories\MT-20261118-018DC6_github_security-pride_MalHug
+2026-11-18 15:32:10 | INFO     | modeltrust.policy | Policy decision=REVIEW risk=MEDIUM violations=2
+2026-11-18 15:32:10 | INFO     | modeltrust.reporting | Generated PDF security report: C:\Users\sriya\Desktop\Major Project\modeltrust\storage\reports\ModelTrust_Report_MT-20261118-018DC6.pdf
