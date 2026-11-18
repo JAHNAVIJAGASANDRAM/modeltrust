@@ -1,0 +1,63 @@
+/* ModelTrust — Custom Styles */
+
+:root {
+  --mt-bg: #0f1117;
+  --mt-card-bg: #161b22;
+  --mt-border: #30363d;
+}
+
+body {
+  background-color: var(--mt-bg);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+main { flex: 1; }
+
+/* Cards */
+.card {
+  background-color: var(--mt-card-bg);
+  border-color: var(--mt-border) !important;
+}
+
+.card-header {
+  background-color: rgba(255,255,255,0.03);
+  border-color: var(--mt-border) !important;
+}
+
+/* Navbar */
+.navbar { background-color: #0d1117 !important; }
+
+/* Table */
+.table-dark { --bs-table-bg: var(--mt-card-bg); }
+.table-hover > tbody > tr:hover > * { background-color: rgba(99,102,241,0.08); }
+
+/* Badge tweaks */
+.badge.fs-4 { padding: 0.4em 0.9em; border-radius: 0.5rem; }
+.badge.fs-6 { font-size: 0.9rem !important; }
+
+/* Progress bar */
+.progress { background-color: #21262d; }
+
+/* Gauge canvas */
+#trustGauge { max-width: 180px; }
+
+/* Form controls */
+.form-control, .form-select {
+  background-color: #0d1117;
+  border-color: var(--mt-border);
+  color: #e6edf3;
+}
+.form-control:focus, .form-select:focus {
+  background-color: #0d1117;
+  border-color: #58a6ff;
+  color: #e6edf3;
+  box-shadow: 0 0 0 0.2rem rgba(88,166,255,0.15);
+}
+
+/* Stat card display */
+.display-5 { font-size: 2.5rem; }
+
+/* Smooth transitions */
+.btn, .card, .badge { transition: all 0.15s ease; }

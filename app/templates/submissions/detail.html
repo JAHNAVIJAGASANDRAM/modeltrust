@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+{% block content %}
+
+<!-- Header -->
+<div class="d-flex align-items-start justify-content-between mb-4 flex-wrap gap-2">
+  <div class="d-flex align-items-center gap-3">
+    <a href="{{ url_for('dashboard.dashboard') }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div>
+      <h4 class="mb-0 fw-bold">{{ submission.name }}</h4>
+      <p class="text-muted small mb-0">
+        {% if submission.repo_url %}
+          <a href="{{ submission.repo_url }}" target="_blank" class="text-decoration-none">
+            <i class="bi bi-github me-1"></i>{{ submission.repo_url }}
+          </a>
+        {% else %}No repository URL{% endif %}
+      </p>
+    </div>
+  </div>
+  <div class="d-flex gap-2">
+    <form action="{{ url_for('submissions.rescan', submission_id=submission.id) }}" method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn-outline-info btn-sm"><i class="bi bi-arrow-repeat me-1"></i>Re-scan</button>
+    </form>
+    <form action="{{ url_for('submissions.delete', submission_id=submission.id) }}" method="POST"
+          onsubmit="return confirm('Delete this submission?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash me-1"></i>Delete</button>
+    </form>
+  </div>
+</div>
+
+{% if scan %}
+<!-- Trust Score Hero -->
+<div class="row g-4 mb-4">
+  <div class="col-md-4">
+    <div class="card border-secondary text-center p-4 h-100">
+      <canvas id="trustGauge" width="200" height="200" class="mx-auto"></canvas>
+      <h2 class="fw-bold mt-3 mb-0 text-{{ scan.grade_color }}">{{ scan.trust_score }}<small class="fs-5 text-muted">/100</small></h2>
+      <p class="text-muted mb-1">Trust Score</p>
+      <span class="badge bg-{{ scan.grade_color }} fs-4 px-3">Grade {{ scan.grade }}</span>
+    </div>
+  </div>
+
+  <div class="col-md-8">
+    <div class="card border-secondary h-100 p-3">
+      <h6 class="text-muted mb-3 fw-semibold">Score Breakdown</h6>
+      {% set checks = [
+        ('License', scan.license_score, scan.get_detail('license')),
+        ('Model Card', scan.model_card_score, scan.get_detail('model_card')),
+        ('Dependencies', scan.dependency_score, scan.get_detail('dependency')),
+        ('Bias Disclosure', scan.bias_score, scan.get_detail('bias')),
+        ('README Quality', scan.readme_score, scan.get_detail('readme')),
+      ] %}
+      {% for label, score, detail in checks %}
+      <div class="mb-3">
+        <div class="d-flex justify-content-between mb-1">
+          <span class="small fw-semibold">{{ label }}</span>
+          <span class="small text-muted">{{ score|int }}/20</span>
+        </div>
+        <div class="progress" style="height:8px;">
+          {% set pct = (score / 20 * 100)|int %}
+          {% if pct >= 75 %}{% set bar_cls = 'bg-success' %}
+          {% elif pct >= 50 %}{% set bar_cls = 'bg-info' %}
+          {% elif pct >= 25 %}{% set bar_cls = 'bg-warning' %}
+          {% else %}{% set bar_cls = 'bg-danger' %}{% endif %}
+          <div class="progress-bar {{ bar_cls }}" style="width:{{ pct }}%"></div>
+        </div>
+        {% if detail.notes %}
+        <p class="text-muted small mt-1 mb-0">{{ detail.notes }}</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Detail Cards -->
+<div class="row g-3">
+
+  <!-- License -->
+  {% set ld = scan.get_detail('license') %}
+  <div class="col-md-6">
+    <div class="card border-secondary h-100">
+      <div class="card-header border-secondary">
+        <i class="bi bi-file-earmark-text me-2"></i>License
+        <span class="badge bg-{{ 'success' if ld.osi_approved else 'warning' }} float-end">
+          {{ 'OSI Approved' if ld.osi_approved else 'Not OSI' }}
+        </span>
+      </div>
+      <div class="card-body">
+        <p class="mb-1"><strong>{{ ld.license or 'Unknown' }}</strong></p>
+        <p class="text-muted small mb-0">{{ ld.notes }}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Model Card -->
+  {% set mc = scan.get_detail('model_card') %}
+  <div class="col-md-6">
+    <div class="card border-secondary h-100">
+      <div class="card-header border-secondary">
+        <i class="bi bi-card-text me-2"></i>Model Card
+      </div>
+      <div class="card-body">
+        {% if mc.sections_found %}
+        <p class="small mb-1 text-success"><i class="bi bi-check-circle me-1"></i>Found: {{ mc.sections_found | join(', ') }}</p>
+        {% endif %}
+        {% if mc.sections_missing %}
+        <p class="small mb-1 text-danger"><i class="bi bi-x-circle me-1"></i>Missing: {{ mc.sections_missing | join(', ') }}</p>
+        {% endif %}
+        <p class="text-muted small mb-0">{{ mc.notes }}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dependencies -->
+  {% set dep = scan.get_detail('dependency') %}
+  <div class="col-md-6">
+    <div class="card border-secondary h-100">
+      <div class="card-header border-secondary">
+        <i class="bi bi-boxes me-2"></i>Dependencies
+        {% if dep.vulnerable %}
+        <span class="badge bg-danger float-end">{{ dep.vulnerable|length }} vulnerable</span>
+        {% else %}
+        <span class="badge bg-success float-end">Clean</span>
+        {% endif %}
+      </div>
+      <div class="card-body">
+        {% if dep.vulnerable %}
+        <p class="text-danger small mb-1">Vulnerable: {{ dep.vulnerable | join(', ') }}</p>
+        {% endif %}
+        <p class="text-muted small mb-1">Checked {{ dep.checked|length if dep.checked else 0 }} packages</p>
+        <p class="text-muted small mb-0">{{ dep.notes }}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bias -->
+  {% set bias = scan.get_detail('bias') %}
+  <div class="col-md-6">
+    <div class="card border-secondary h-100">
+      <div class="card-header border-secondary">
+        <i class="bi bi-balance-scale me-2"></i>Bias &amp; Fairness
+        {% if bias.high_risk %}<span class="badge bg-warning text-dark float-end">High-Risk Type</span>{% endif %}
+      </div>
+      <div class="card-body">
+        {% if bias.keywords_found %}
+        <p class="text-success small mb-1"><i class="bi bi-check-circle me-1"></i>Keywords: {{ bias.keywords_found | join(', ') }}</p>
+        {% else %}
+        <p class="text-warning small mb-1"><i class="bi bi-exclamation-triangle me-1"></i>No bias keywords found</p>
+        {% endif %}
+        <p class="text-muted small mb-0">{{ bias.notes }}</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- README -->
+  {% set rm = scan.get_detail('readme') %}
+  <div class="col-12">
+    <div class="card border-secondary">
+      <div class="card-header border-secondary">
+        <i class="bi bi-book me-2"></i>README Quality
+      </div>
+      <div class="card-body">
+        <div class="row g-3 text-center">
+          <div class="col-3">
+            <div class="fs-4 fw-bold text-primary">{{ rm.word_count or 0 }}</div>
+            <div class="text-muted small">Words</div>
+          </div>
+          <div class="col-3">
+            <div class="fs-4 fw-bold text-info">{{ rm.headers or 0 }}</div>
+            <div class="text-muted small">Sections</div>
+          </div>
+          <div class="col-3">
+            <div class="fs-4 fw-bold text-success">{{ rm.code_blocks or 0 }}</div>
+            <div class="text-muted small">Code blocks</div>
+          </div>
+          <div class="col-3">
+            <div class="fs-4 fw-bold text-warning">{{ rm.links or 0 }}</div>
+            <div class="text-muted small">Links</div>
+          </div>
+        </div>
+        <p class="text-muted small mt-3 mb-0">{{ rm.notes }}</p>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /row -->
+
+{% else %}
+<div class="alert alert-warning">
+  <i class="bi bi-exclamation-triangle me-2"></i>
+  No scan results yet. Status: <strong>{{ submission.status }}</strong>.
+  {% if submission.status == 'failed' %}
+  <form action="{{ url_for('submissions.rescan', submission_id=submission.id) }}" method="POST" class="d-inline">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button class="btn btn-sm btn-warning ms-2">Retry Scan</button>
+  </form>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+{% if scan %}
+<script>
+const ctx = document.getElementById('trustGauge').getContext('2d');
+const score = {{ scan.trust_score }};
+const remaining = 100 - score;
+
+const colorMap = { A: '#198754', B: '#0dcaf0', C: '#ffc107', D: '#dc3545', F: '#212529' };
+const grade = "{{ scan.grade }}";
+const color = colorMap[grade] || '#6c757d';
+
+new Chart(ctx, {
+  type: 'doughnut',
+  data: {
+    datasets: [{
+      data: [score, remaining],
+      backgroundColor: [color, '#2b2b2b'],
+      borderWidth: 0,
+      circumference: 270,
+      rotation: 225,
+    }]
+  },
+  options: {
+    cutout: '78%',
+    plugins: { legend: { display: false }, tooltip: { enabled: false } },
+    animation: { animateRotate: true, duration: 1000 }
+  }
+});
+</script>
+{% endif %}
+{% endblock %}
