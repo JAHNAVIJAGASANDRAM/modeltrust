@@ -1,0 +1,206 @@
+{% extends "base.html" %}
+{% block title %}Submit Repository – ModelTrust{% endblock %}
+{% block page_heading %}AI Artifact Security Gateway{% endblock %}
+{% block page_subheading %}Evaluate GitHub &amp; Hugging Face AI repositories before admitting them into the Trusted AI Artifact Registry{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+  <!-- Hero Submission Panel -->
+  <div class="col-lg-8">
+    <div class="card mt-card shadow-sm">
+      <div class="card-body p-4">
+        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+          <div>
+            <span class="badge bg-primary-subtle text-primary-emphasis mb-2">
+              <i class="bi bi-shield-check me-1"></i>Supply Chain Security Gatekeeper
+            </span>
+            <h4 class="fw-bold mb-1">Submit AI Repository for Security Evaluation</h4>
+            <p class="text-secondary small mb-0">
+              ModelTrust inspects provenance, static Python code (Bandit), dependency CVEs (pip-audit &amp; OSV),
+              model serialization safety (PickleScan), SHA-256 integrity, and SBOM (Syft) without executing untrusted code.
+            </p>
+          </div>
+        </div>
+
+        <form id="analyzeForm" action="{{ url_for('analyze') }}" method="POST" novalidate>
+          <label for="repoUrlInput" class="form-label fw-semibold small text-uppercase text-secondary">
+            Repository URL (GitHub or Hugging Face)
+          </label>
+          <div class="input-group input-group-lg mb-2">
+            <span class="input-group-text bg-dark border-secondary text-primary">
+              <i class="bi bi-link-45deg"></i>
+            </span>
+            <input
+              type="url"
+              id="repoUrlInput"
+              name="repository_url"
+              class="form-control bg-dark border-secondary text-white"
+              placeholder="https://github.com/owner/repo or https://huggingface.co/owner/model"
+              required
+              autocomplete="off"
+            />
+            <button type="submit" id="analyzeBtn" class="btn btn-primary px-4 fw-semibold">
+              <i class="bi bi-search me-1"></i>Analyze Repository
+            </button>
+          </div>
+          <div id="urlValidationMsg" class="small mb-3 text-secondary">
+            <i class="bi bi-github me-1"></i>GitHub (<code>https://github.com/&lt;owner&gt;/&lt;repo&gt;</code>)
+            &nbsp;&bull;&nbsp;
+            <i class="bi bi-cpu me-1"></i>Hugging Face (<code>https://huggingface.co/&lt;owner&gt;/&lt;model&gt;</code>)
+          </div>
+
+          <!-- Quick Platform Support Pills -->
+          <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+            <span class="text-secondary small">Quick test examples:</span>
+            <button type="button" class="btn btn-xs btn-outline-secondary example-url-btn"
+                    data-url="https://github.com/pallets/markupsafe">
+              <i class="bi bi-github me-1"></i>pallets/markupsafe
+            </button>
+            <button type="button" class="btn btn-xs btn-outline-secondary example-url-btn"
+                    data-url="https://huggingface.co/hf-internal-testing/tiny-random-BertModel">
+              <i class="bi bi-box-seam me-1"></i>HF tiny-random-BertModel
+            </button>
+          </div>
+        </form>
+
+        <!-- Scan Progress Indicator (hidden until submit) -->
+        <div id="scanProgressBox" class="mt-4 p-3 rounded border border-primary-subtle bg-dark d-none">
+          <div class="d-flex align-items-center justify-content-between mb-2">
+            <div class="fw-semibold text-primary">
+              <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+              <span id="scanStageTitle">Validating repository URL and acquiring files...</span>
+            </div>
+            <span id="scanPercent" class="badge bg-primary">10%</span>
+          </div>
+          <div class="progress mb-3" style="height: 8px;">
+            <div id="scanProgressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary" style="width: 10%;"></div>
+          </div>
+          <div class="row g-2 small text-secondary" id="scanStagesList">
+            <div class="col-md-4" data-stage="0"><i class="bi bi-circle me-1"></i>1. URL &amp; Acquisition</div>
+            <div class="col-md-4" data-stage="1"><i class="bi bi-circle me-1"></i>2. Provenance Check</div>
+            <div class="col-md-4" data-stage="2"><i class="bi bi-circle me-1"></i>3. Bandit SAST</div>
+            <div class="col-md-4" data-stage="3"><i class="bi bi-circle me-1"></i>4. Dependencies &amp; OSV</div>
+            <div class="col-md-4" data-stage="4"><i class="bi bi-circle me-1"></i>5. PickleScan &amp; SHA-256</div>
+            <div class="col-md-4" data-stage="5"><i class="bi bi-circle me-1"></i>6. Syft SBOM &amp; Policy</div>
+          </div>
+        </div>
+
+        <div id="scanErrorAlert" class="alert alert-danger mt-3 d-none"></div>
+      </div>
+    </div>
+
+    <!-- Pipeline Architecture Strip -->
+    <div class="card mt-card mt-4">
+      <div class="card-header border-secondary-subtle fw-semibold small text-uppercase text-secondary">
+        <i class="bi bi-diagram-3 me-2 text-primary"></i>Security Evaluation Pipeline
+      </div>
+      <div class="card-body">
+        <div class="row g-3 text-center">
+          {% for icon, title, desc in [
+            ('bi-fingerprint', 'Provenance', 'Ownership, commits & consistency'),
+            ('bi-code-slash', 'Static Analysis', 'Bandit Python security scan'),
+            ('bi-boxes', 'Dependencies', 'pip-audit & live OSV API'),
+            ('bi-file-earmark-lock', 'Serialization', 'PickleScan model inspection'),
+            ('bi-hash', 'Integrity', 'SHA-256 manifest hashing'),
+            ('bi-list-check', 'SBOM & Policy', 'Syft JSON + APPROVE/REVIEW/REJECT')
+          ] %}
+          <div class="col-6 col-md-4">
+            <div class="p-3 rounded border border-secondary-subtle h-100 bg-dark-subtle">
+              <i class="bi {{ icon }} fs-4 text-primary d-block mb-1"></i>
+              <div class="fw-semibold small">{{ title }}</div>
+              <div class="text-secondary" style="font-size: 0.74rem;">{{ desc }}</div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column: Stats & Scanner Tool Readiness -->
+  <div class="col-lg-4">
+    <div class="card mt-card mb-4">
+      <div class="card-header border-secondary-subtle fw-semibold small text-uppercase text-secondary">
+        <i class="bi bi-activity me-2 text-info"></i>Gateway Overview
+      </div>
+      <div class="card-body">
+        <div class="row g-2 text-center">
+          <div class="col-6">
+            <div class="p-3 rounded bg-dark border border-secondary-subtle">
+              <div class="fs-3 fw-bold text-white">{{ stats.total }}</div>
+              <div class="text-secondary small">Analyzed</div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="p-3 rounded bg-dark border border-success-subtle">
+              <div class="fs-3 fw-bold text-success">{{ stats.approved }}</div>
+              <div class="text-secondary small">Approved</div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="p-3 rounded bg-dark border border-warning-subtle">
+              <div class="fs-3 fw-bold text-warning">{{ stats.review }}</div>
+              <div class="text-secondary small">Review</div>
+            </div>
+          </div>
+          <div class="col-6">
+            <div class="p-3 rounded bg-dark border border-danger-subtle">
+              <div class="fs-3 fw-bold text-danger">{{ stats.rejected }}</div>
+              <div class="text-secondary small">Rejected</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mt-card mb-4">
+      <div class="card-header border-secondary-subtle fw-semibold small text-uppercase text-secondary">
+        <i class="bi bi-tools me-2 text-warning"></i>Scanner Toolchain Status
+      </div>
+      <div class="card-body p-0">
+        <ul class="list-group list-group-flush">
+          {% for key, t in tools.items() %}
+          <li class="list-group-item bg-transparent border-secondary-subtle d-flex justify-content-between align-items-center">
+            <div>
+              <div class="small fw-semibold">{{ t.name }}</div>
+              {% if not t.available %}
+                <div class="text-secondary" style="font-size: 0.72rem;">Install: <code>{{ t.install }}</code></div>
+              {% endif %}
+            </div>
+            {% if t.available %}
+              <span class="badge bg-success-subtle text-success-emphasis">READY</span>
+            {% else %}
+              <span class="badge bg-secondary">NOT INSTALLED</span>
+            {% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </div>
+
+    {% if recent %}
+    <div class="card mt-card">
+      <div class="card-header border-secondary-subtle fw-semibold small text-uppercase text-secondary d-flex justify-content-between">
+        <span><i class="bi bi-clock-history me-1"></i>Recent Scans</span>
+        <a href="{{ url_for('dashboard') }}" class="text-decoration-none small">View All</a>
+      </div>
+      <div class="list-group list-group-flush">
+        {% for item in recent %}
+        <a href="{{ url_for('analysis_detail', artifact_id=item.id) }}"
+           class="list-group-item list-group-item-action bg-transparent border-secondary-subtle d-flex justify-content-between align-items-center">
+          <div class="text-truncate me-2">
+            <div class="small fw-semibold text-white text-truncate">{{ item.owner }}/{{ item.repo_name }}</div>
+            <div class="text-secondary" style="font-size: 0.72rem;">{{ item.assessment_id }} &bull; {{ item.platform|upper }}</div>
+          </div>
+          {% set dec = item.decision or 'PENDING' %}
+          <span class="badge {% if dec == 'APPROVE' %}bg-success{% elif dec == 'REVIEW' %}bg-warning text-dark{% elif dec == 'REJECT' %}bg-danger{% else %}bg-secondary{% endif %}">
+            {{ dec }}
+          </span>
+        </a>
+        {% endfor %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

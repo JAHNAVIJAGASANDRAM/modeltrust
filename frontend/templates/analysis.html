@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% block title %}Security Analysis – ModelTrust{% endblock %}
+{% block page_heading %}Detailed Security Analysis{% endblock %}
+{% block page_subheading %}Module-by-module security posture evaluation across provenance, code, dependencies, serialization, integrity, and SBOM{% endblock %}
+
+{% block content %}
+{% if not bundle %}
+<div class="card mt-card text-center py-5">
+  <div class="card-body">
+    <i class="bi bi-bug display-4 text-secondary d-block mb-3"></i>
+    <h5>No Security Analysis Available Yet</h5>
+    <p class="text-secondary small">Submit a GitHub or Hugging Face repository to inspect module-level security findings.</p>
+    <a href="{{ url_for('index') }}" class="btn btn-primary btn-sm">Submit Repository</a>
+  </div>
+</div>
+{% else %}
+{% set art = bundle.artifact %}
+{% set pd = bundle.policy_decision %}
+{% set scans = bundle.scans %}
+
+<!-- Assessment Header Banner -->
+<div class="card mt-card mb-4">
+  <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <code class="text-info">{{ art.assessment_id }}</code>
+        <span class="badge bg-dark border border-secondary text-uppercase">{{ art.platform }}</span>
+        {% if pd %}
+          <span class="badge {% if pd.decision == 'APPROVE' %}bg-success{% elif pd.decision == 'REVIEW' %}bg-warning text-dark{% else %}bg-danger{% endif %}">
+            DECISION: {{ pd.decision }}
+          </span>
+          <span class="badge {% if pd.risk_classification == 'LOW' %}bg-success-subtle text-success-emphasis{% elif pd.risk_classification == 'MEDIUM' %}bg-warning-subtle text-warning-emphasis{% else %}bg-danger-subtle text-danger-emphasis{% endif %}">
+            RISK: {{ pd.risk_classification }}
+          </span>
+        {% endif %}
+      </div>
+      <h4 class="fw-bold mb-1">{{ art.owner }}/{{ art.repo_name }}</h4>
+      <a href="{{ art.repository_url }}" target="_blank" rel="noopener" class="small text-secondary text-decoration-none">
+        <i class="bi bi-box-arrow-up-right me-1"></i>{{ art.repository_url }}
+      </a>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('report_detail', artifact_id=art.id) }}" class="btn btn-primary btn-sm">
+        <i class="bi bi-file-earmark-text me-1"></i>View Assessment Report
+      </a>
+      <a href="{{ url_for('download_report', artifact_id=art.id) }}" class="btn btn-outline-light btn-sm">
+        <i class="bi bi-file-earmark-pdf me-1"></i>Download PDF
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- 6 Module Status Pills -->
+{% set module_defs = [
+  ('provenance', 'Repository Provenance', 'bi-fingerprint'),
+  ('static_analysis', 'Static Code Analysis', 'bi-code-slash'),
+  ('dependency_analysis', 'Dependency Analysis', 'bi-boxes'),
+  ('serialization_analysis', 'Serialization Analysis', 'bi-file-earmark-lock'),
+  ('integrity', 'Integrity Verification', 'bi-hash'),
+  ('sbom', 'SBOM Generation', 'bi-list-check')
+] %}
+
+<div class="row g-3 mb-4">
+  {% for key, label, icon in module_defs %}
+    {% set s = scans.get(key) %}
+    {% set st = s.status if s else 'NOT SCANNED' %}
+    <div class="col-6 col-md-4 col-xl-2">
+      <a href="#section-{{ key }}" class="text-decoration-none">
+        <div class="card mt-card h-100 p-3 text-center mt-module-pill">
+          <i class="bi {{ icon }} fs-4 mb-1 {% if st == 'PASS' %}text-success{% elif st == 'WARNING' %}text-warning{% elif st == 'FAIL' %}text-danger{% else %}text-secondary{% endif %}"></i>
+          <div class="small fw-semibold text-white mb-2">{{ label }}</div>
+          <span class="badge {% if st == 'PASS' %}bg-success{% elif st == 'WARNING' %}bg-warning text-dark{% elif st == 'FAIL' %}bg-danger{% else %}bg-secondary{% endif %}">
+            {{ st }}
+          </span>
+        </div>
+      </a>
+    </div>
+  {% endfor %}
+</div>
+
+<!-- Separate Detailed Sections for Each Module -->
+{% for key, label, icon in module_defs %}
+  {% set s = scans.get(key) %}
+  {% set st = s.status if s else 'NOT SCANNED' %}
+  {% set sev = s.severity if s else 'UNKNOWN' %}
+  <div id="section-{{ key }}" class="card mt-card mb-4">
+    <div class="card-header border-secondary-subtle d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi {{ icon }} text-primary"></i>
+        <span class="fw-bold">{{ label }}</span>
+        {% if s and s.tool_name %}
+          <span class="badge bg-dark border border-secondary text-secondary">{{ s.tool_name }}</span>
+        {% endif %}
+      </div>
+      <div class="d-flex align-items-center gap-2">
+        <span class="badge bg-dark border border-secondary">Severity: {{ sev }}</span>
+        <span class="badge {% if st == 'PASS' %}bg-success{% elif st == 'WARNING' %}bg-warning text-dark{% elif st == 'FAIL' %}bg-danger{% else %}bg-secondary{% endif %}">
+          {{ st }}
+        </span>
+      </div>
+    </div>
+
+    <div class="card-body">
+      {% if s %}
+        <p class="small mb-3">{{ s.summary }}</p>
+
+        <!-- Extra module-specific panels -->
+        {% if key == 'provenance' and s.raw_details %}
+          <div class="row g-2 mb-3 small">
+            <div class="col-md-3"><span class="text-secondary">Owner:</span> <strong>{{ s.raw_details.owner or 'Unknown' }}</strong></div>
+            <div class="col-md-3"><span class="text-secondary">Type:</span> {{ s.raw_details.owner_type or 'Unknown' }}</div>
+            <div class="col-md-3"><span class="text-secondary">Releases:</span> {{ s.raw_details.releases_count or 0 }}</div>
+            <div class="col-md-3"><span class="text-secondary">Commits Inspected:</span> {{ s.raw_details.commits_inspected or 0 }} ({{ s.raw_details.signed_commits or 0 }} signed)</div>
+          </div>
+          {% if s.raw_details.verified_signals %}
+            <div class="mb-3">
+              <div class="small text-secondary fw-semibold mb-1">Verified Signals:</div>
+              {% for sig in s.raw_details.verified_signals %}
+                <span class="badge bg-success-subtle text-success-emphasis me-1 mb-1"><i class="bi bi-check2 me-1"></i>{{ sig }}</span>
+              {% endfor %}
+            </div>
+          {% endif %}
+        {% endif %}
+
+        {% if key == 'integrity' and s.raw_details %}
+          <div class="p-3 rounded bg-dark border border-secondary-subtle mb-3 small">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+              <div>
+                <div class="text-secondary">Composite Repository SHA-256 Digest</div>
+                <code class="text-success fs-6" id="compositeHashVal">{{ s.raw_details.composite_hash or 'N/A' }}</code>
+              </div>
+              {% if s.raw_details.composite_hash %}
+                <button type="button" class="btn btn-xs btn-outline-secondary copy-btn" data-copy="{{ s.raw_details.composite_hash }}">
+                  <i class="bi bi-clipboard me-1"></i>Copy SHA-256
+                </button>
+              {% endif %}
+            </div>
+            {% if s.raw_details.file_entries %}
+              <details class="mt-3">
+                <summary class="text-info" style="cursor:pointer;">Show per-file SHA-256 manifest ({{ s.raw_details.file_count }} files)</summary>
+                <div class="table-responsive mt-2" style="max-height: 240px;">
+                  <table class="table table-dark table-sm mb-0" style="font-size: 0.78rem;">
+                    <thead><tr><th>File</th><th>SHA-256</th><th class="text-end">Bytes</th></tr></thead>
+                    <tbody>
+                      {% for fe in s.raw_details.file_entries[:100] %}
+                        <tr>
+                          <td>{{ fe.file }}</td>
+                          <td><code>{{ fe.sha256 }}</code></td>
+                          <td class="text-end">{{ fe.size_bytes }}</td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            {% endif %}
+          </div>
+        {% endif %}
+
+        {% if key == 'sbom' and s.raw_details %}
+          <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3 small">
+            <div>
+              <strong>Status:</strong> {{ 'Generated (' ~ s.raw_details.bom_format ~ ' ' ~ (s.raw_details.spec_version or '') ~ ')' if s.raw_details.sbom_generated else 'Not Generated' }}
+              &nbsp;&bull;&nbsp;
+              <strong>Components:</strong> {{ s.raw_details.component_count or 0 }}
+            </div>
+            {% if s.raw_details.sbom_generated %}
+              <a href="{{ url_for('download_sbom', artifact_id=art.id) }}" class="btn btn-xs btn-outline-info">
+                <i class="bi bi-download me-1"></i>Download SBOM JSON
+              </a>
+            {% endif %}
+          </div>
+          {% if s.raw_details.components %}
+            <details class="mb-3">
+              <summary class="text-info small" style="cursor:pointer;">View identified SBOM components ({{ s.raw_details.component_count }})</summary>
+              <div class="table-responsive mt-2" style="max-height: 240px;">
+                <table class="table table-dark table-sm mb-0" style="font-size: 0.78rem;">
+                  <thead><tr><th>Package</th><th>Version</th><th>Type</th><th>PURL</th></tr></thead>
+                  <tbody>
+                    {% for comp in s.raw_details.components[:100] %}
+                      <tr>
+                        <td>{{ comp.name }}</td>
+                        <td><code>{{ comp.version }}</code></td>
+                        <td>{{ comp.type or 'library' }}</td>
+                        <td><code class="text-secondary">{{ comp.purl or '—' }}</code></td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          {% endif %}
+        {% endif %}
+
+        <!-- Findings Table -->
+        {% if s.findings %}
+          <div class="table-responsive">
+            <table class="table table-dark table-hover table-sm align-middle mb-0 small">
+              <thead>
+                <tr class="text-secondary">
+                  <th style="width: 110px;">Severity</th>
+                  <th style="width: 28%;">Finding</th>
+                  <th>Description &amp; Recommendation</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for f in s.findings %}
+                  {% set fsev = (f.severity or 'INFO')|upper %}
+                  <tr>
+                    <td>
+                      <span class="badge {% if fsev in ['CRITICAL', 'HIGH'] %}bg-danger{% elif fsev == 'MEDIUM' %}bg-warning text-dark{% elif fsev == 'LOW' %}bg-info text-dark{% else %}bg-secondary{% endif %}">
+                        {{ fsev }}
+                      </span>
+                    </td>
+                    <td class="fw-semibold">
+                      {{ f.title }}
+                      {% if f.file %}
+                        <div class="text-secondary fw-normal" style="font-size: 0.75rem;">
+                          <code>{{ f.file }}{% if f.line %}:{{ f.line }}{% endif %}</code>
+                        </div>
+                      {% endif %}
+                    </td>
+                    <td>
+                      <div>{{ f.description }}</div>
+                      {% if f.recommendation %}
+                        <div class="text-info mt-1" style="font-size: 0.76rem;">
+                          <i class="bi bi-lightbulb me-1"></i>{{ f.recommendation }}
+                        </div>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        {% else %}
+          <div class="text-success small"><i class="bi bi-check-circle me-1"></i>No security findings reported by this module.</div>
+        {% endif %}
+      {% else %}
+        <div class="text-secondary small">This module has not been executed for this assessment.</div>
+      {% endif %}
+    </div>
+  </div>
+{% endfor %}
+{% endif %}
+{% endblock %}

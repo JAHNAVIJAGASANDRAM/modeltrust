@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% block title %}Assessment Report – ModelTrust{% endblock %}
+{% block page_heading %}Security Assessment Report{% endblock %}
+{% block page_subheading %}Executive summary, policy enforcement outcome, digital certification, and downloadable PDF report{% endblock %}
+
+{% block content %}
+{% if not bundle %}
+<div class="card mt-card text-center py-5">
+  <div class="card-body">
+    <i class="bi bi-file-earmark-pdf display-4 text-secondary d-block mb-3"></i>
+    <h5>No Assessment Report Available</h5>
+    <p class="text-secondary small">Analyze an AI repository first to generate a formal security assessment report.</p>
+    <a href="{{ url_for('index') }}" class="btn btn-primary btn-sm">Submit Repository</a>
+  </div>
+</div>
+{% else %}
+{% set art = bundle.artifact %}
+{% set pd = bundle.policy_decision %}
+{% set cert = bundle.certificate %}
+{% set dec = pd.decision if pd else 'PENDING' %}
+
+<!-- Decision Hero Banner -->
+<div class="card mt-card mb-4 {% if dec == 'APPROVE' %}border-success{% elif dec == 'REVIEW' %}border-warning{% else %}border-danger{% endif %}">
+  <div class="card-body p-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+      <div class="small text-secondary text-uppercase fw-semibold mb-1">
+        Assessment ID: <code class="text-info">{{ art.assessment_id }}</code>
+      </div>
+      <h3 class="fw-bold mb-2">
+        Policy Decision:
+        <span class="{% if dec == 'APPROVE' %}text-success{% elif dec == 'REVIEW' %}text-warning{% else %}text-danger{% endif %}">
+          {{ dec }}
+        </span>
+      </h3>
+      <p class="mb-2 small">{{ pd.reason if pd else 'Pending policy evaluation.' }}</p>
+      <div class="d-flex gap-2 flex-wrap">
+        <span class="badge bg-dark border border-secondary">
+          Risk Classification: <strong>{{ pd.risk_classification if pd else 'UNKNOWN' }}</strong>
+        </span>
+        <span class="badge {% if dec == 'APPROVE' %}bg-success{% else %}bg-secondary{% endif %}">
+          Trusted Registry: {{ 'ADMITTED' if bundle.registry_entry else 'NOT ADMITTED' }}
+        </span>
+      </div>
+    </div>
+    <div class="d-flex flex-column gap-2">
+      <a href="{{ url_for('download_report', artifact_id=art.id) }}" class="btn btn-primary">
+        <i class="bi bi-file-earmark-pdf me-1"></i>Download PDF Report
+      </a>
+      <a href="{{ url_for('analysis_detail', artifact_id=art.id) }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-bug me-1"></i>Inspect Module Findings
+      </a>
+    </div>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <!-- Repository Metadata -->
+  <div class="col-lg-6">
+    <div class="card mt-card h-100">
+      <div class="card-header border-secondary-subtle fw-semibold small text-uppercase text-secondary">
+        <i class="bi bi-info-circle me-1 text-primary"></i>Repository Details
+      </div>
+      <div class="card-body small">
+        <dl class="row mb-0">
+          <dt class="col-sm-4 text-secondary">Repository</dt>
+          <dd class="col-sm-8 fw-semibold">{{ art.owner }}/{{ art.repo_name }}</dd>
+          <dt class="col-sm-4 text-secondary">URL</dt>
+          <dd class="col-sm-8"><a href="{{ art.repository_url }}" target="_blank" rel="noopener">{{ art.repository_url }}</a></dd>
+          <dt class="col-sm-4 text-secondary">Platform</dt>
+          <dd class="col-sm-8 text-uppercase">{{ art.platform }}</dd>
+          <dt class="col-sm-4 text-secondary">Created / Updated</dt>
+          <dd class="col-sm-8">{{ art.repo_created_at or 'N/A' }} / {{ art.repo_updated_at or 'N/A' }}</dd>
+          <dt class="col-sm-4 text-secondary">Files Acquired</dt>
+          <dd class="col-sm-8">{{ art.file_count }} file(s) ({{ '%.1f'|format((art.total_size_bytes or 0) / 1024) }} KB)</dd>
+          <dt class="col-sm-4 text-secondary">SHA-256 Digest</dt>
+          <dd class="col-sm-8"><code class="text-break">{{ art.artifact_hash or 'Not computed' }}</code></dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+
+  <!-- Digital Certification Card -->
+  <div class="col-lg-6">
+    <div class="card mt-card h-100">
+      <div class="card-header border-secondary-subtle fw-semibold small text-uppercase text-secondary">
+        <i class="bi bi-award me-1 text-success"></i>Digital Trust Certification
+      </div>
+      <div class="card-body small">
+        {% if cert %}
+          <div class="alert alert-success py-2 small mb-3">
+            <i class="bi bi-patch-check-fill me-1"></i>
+            Digitally signed by <strong>{{ cert.issuer }}</strong>
+          </div>
+          <dl class="row mb-0">
+            <dt class="col-sm-4 text-secondary">Certificate ID</dt>
+            <dd class="col-sm-8"><code>{{ cert.certificate_id }}</code></dd>
+            <dt class="col-sm-4 text-secondary">Algorithm</dt>
+            <dd class="col-sm-8">{{ cert.algorithm }}</dd>
+            <dt class="col-sm-4 text-secondary">Issued At</dt>
+            <dd class="col-sm-8">{{ cert.issued_at }}</dd>
+            <dt class="col-sm-4 text-secondary">Status</dt>
+            <dd class="col-sm-8"><span class="badge bg-success">{{ cert.status }}</span></dd>
+            <dt class="col-sm-4 text-secondary">Signature</dt>
+            <dd class="col-sm-8"><code class="text-break">{{ cert.signature_b64[:96] }}...</code></dd>
+          </dl>
+        {% else %}
+          <div class="text-secondary py-4 text-center">
+            <i class="bi bi-shield-slash fs-2 d-block mb-2"></i>
+            No certificate issued. Artifacts classified as <strong>{{ dec }}</strong> are not signed or admitted to the Trusted AI Artifact Registry.
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Policy Violations -->
+<div class="card mt-card mb-4">
+  <div class="card-header border-secondary-subtle fw-semibold small text-uppercase text-secondary">
+    <i class="bi bi-shield-exclamation me-1 text-danger"></i>Policy Enforcement Evaluation
+  </div>
+  <div class="card-body p-0">
+    {% if pd and pd.violations %}
+      <div class="table-responsive">
+        <table class="table table-dark table-sm align-middle mb-0 small">
+          <thead>
+            <tr class="text-secondary">
+              <th>Rule ID</th>
+              <th>Module</th>
+              <th>Severity</th>
+              <th>Action</th>
+              <th>Violation Details</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for v in pd.violations %}
+            <tr>
+              <td><code>{{ v.rule_id }}</code></td>
+              <td>{{ v.module }}</td>
+              <td><span class="badge bg-secondary">{{ v.severity }}</span></td>
+              <td>
+                <span class="badge {% if v.action == 'REJECT' %}bg-danger{% else %}bg-warning text-dark{% endif %}">
+                  {{ v.action }}
+                </span>
+              </td>
+              <td>{{ v.message }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="p-3 text-success small"><i class="bi bi-check-circle me-1"></i>All organizational security policies satisfied with zero violations.</div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Consolidated Security Summary -->
+<div class="card mt-card">
+  <div class="card-header border-secondary-subtle fw-semibold small text-uppercase text-secondary">
+    <i class="bi bi-clipboard-data me-1 text-info"></i>Module Summary Matrix
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-dark table-sm align-middle mb-0 small">
+        <thead>
+          <tr class="text-secondary">
+            <th>Module</th>
+            <th>Tool</th>
+            <th>Status</th>
+            <th>Severity</th>
+            <th>Summary</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for s in bundle.scans_list %}
+          <tr>
+            <td class="fw-semibold text-capitalize">{{ s.module_name.replace('_', ' ') }}</td>
+            <td>{{ s.tool_name or 'N/A' }}</td>
+            <td>
+              <span class="badge {% if s.status == 'PASS' %}bg-success{% elif s.status == 'WARNING' %}bg-warning text-dark{% elif s.status == 'FAIL' %}bg-danger{% else %}bg-secondary{% endif %}">
+                {{ s.status }}
+              </span>
+            </td>
+            <td>{{ s.severity }}</td>
+            <td>{{ s.summary }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
