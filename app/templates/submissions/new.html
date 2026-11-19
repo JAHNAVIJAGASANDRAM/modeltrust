@@ -26,6 +26,7 @@
           <div class="mb-3">
             {{ form.repo_url.label(class="form-label fw-semibold") }}
             {{ form.repo_url(class="form-control" + (" is-invalid" if form.repo_url.errors else "")) }}
+            <div class="form-text">Accepts GitHub owner/repo, Hugging Face model IDs (hf:model or hf:owner/model), or a full HTTPS repository URL.</div>
             {% for e in form.repo_url.errors %}<div class="invalid-feedback">{{ e }}</div>{% endfor %}
             <div class="form-text">We'll fetch the repository's license, README, and dependencies automatically.</div>
           </div>

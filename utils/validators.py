@@ -83,17 +83,43 @@ def validate_repository_url(raw_url: str) -> dict[str, Any]:
     if len(url) > 512:
         raise ValidationError("Repository URL exceeds maximum length of 512 characters.")
 
-    if any(ch in url for ch in ("\r", "\n", "\x00", " ")):
-        raise ValidationError("Repository URL contains invalid whitespace or control characters.")
+    if any(ch.isspace() or ord(ch) < 32 for ch in url):
+        raise ValidationError("Repository URL contains whitespace or control characters.")
 
-    parsed = urlparse(url)
+    # Convenient identifiers are accepted without weakening URL validation:
+    # owner/repository is the GitHub shorthand; a single Hugging Face model ID
+    # can be written as hf:model or hf:owner/model to avoid ambiguity.
+    if "://" not in url:
+        if url.lower().startswith("hf:"):
+            identifier = url[3:]
+            if not identifier:
+                raise ValidationError("Hugging Face shorthand must be hf:<model> or hf:<owner>/<model>.")
+            url = f"https://huggingface.co/{identifier}"
+        elif url.count("/") == 1:
+            url = f"https://github.com/{url}"
+        elif "/" not in url:
+            url = f"https://huggingface.co/{url}"
+        else:
+            raise ValidationError(
+                "Use a GitHub owner/repository identifier, an hf:model identifier, "
+                "or a full GitHub or Hugging Face HTTPS URL."
+            )
+
+    try:
+        parsed = urlparse(url)
+    except ValueError as exc:
+        raise ValidationError("Repository URL is malformed.") from exc
     if parsed.scheme != "https":
         raise ValidationError("Only HTTPS repository URLs are accepted (e.g., https://github.com/owner/repo).")
 
     if parsed.username or parsed.password:
         raise ValidationError("Embedded credentials in URLs are not permitted.")
 
-    if parsed.port not in (None, 443):
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValidationError("Repository URL contains an invalid port.") from exc
+    if port not in (None, 443):
         raise ValidationError("Non-standard ports are not permitted.")
 
     hostname = (parsed.hostname or "").lower()
@@ -159,6 +185,10 @@ def validate_repository_url(raw_url: str) -> dict[str, Any]:
         elif len(clean_segments) >= 2:
             owner = clean_segments[0]
             repo = clean_segments[1]
+            if len(clean_segments) > 2:
+                raise ValidationError(
+                    "Hugging Face repository path must contain only an optional type and owner/model identifier."
+                )
             repo_id = f"{owner}/{repo}"
         else:
             raise ValidationError("Invalid Hugging Face repository path.")

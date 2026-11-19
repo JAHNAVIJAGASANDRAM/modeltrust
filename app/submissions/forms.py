@@ -1,7 +1,18 @@
 """Submissions WTForms."""
 from flask_wtf import FlaskForm
 from wtforms import StringField, TextAreaField, SelectField, SubmitField
-from wtforms.validators import DataRequired, Length, Optional, URL
+from wtforms.validators import DataRequired, Length, Optional, ValidationError as FormValidationError
+from utils.validators import ValidationError, validate_repository_url
+
+
+def validate_repo_url(form, field):
+    """Validate a supported repository URL/identifier and store its canonical URL."""
+    if not field.data:
+        return
+    try:
+        field.data = validate_repository_url(field.data)["normalized_url"]
+    except ValidationError as exc:
+        raise FormValidationError(str(exc)) from exc
 
 
 class SubmissionForm(FlaskForm):
@@ -16,9 +27,9 @@ class SubmissionForm(FlaskForm):
         render_kw={"placeholder": "What does the model do? Who is the intended user?", "rows": 4},
     )
     repo_url = StringField(
-        "GitHub Repository URL",
-        validators=[Optional(), URL(message="Must be a valid URL")],
-        render_kw={"placeholder": "https://github.com/owner/repo"},
+        "GitHub or Hugging Face Repository",
+        validators=[Optional(), validate_repo_url],
+        render_kw={"placeholder": "https://github.com/owner/repo or owner/repo"},
     )
     model_type = SelectField(
         "Model Type",
