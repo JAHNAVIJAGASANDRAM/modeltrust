@@ -1,16 +1,17 @@
 """Submissions routes — create, view, delete, re-scan."""
 from flask import render_template, redirect, url_for, flash, abort
-from flask_login import login_required, current_user
+from flask_login import current_user
 from app.submissions import submissions_bp
 from app.submissions.forms import SubmissionForm
 from app.models.submission import Submission
 from app.models.scan_result import ScanResult
 from app.scanner.engine import run_scan
 from app.extensions import db
+from app.auth.permissions import roles_required
 
 
 @submissions_bp.route("/new", methods=["GET", "POST"])
-@login_required
+@roles_required("developer", "administrator")
 def new():
     form = SubmissionForm()
     if form.validate_on_submit():
@@ -43,7 +44,7 @@ def new():
 
 
 @submissions_bp.route("/<int:submission_id>")
-@login_required
+@roles_required("developer", "authorized_user", "administrator")
 def detail(submission_id: int):
     sub = db.session.get(Submission, submission_id)
     if sub is None or sub.user_id != current_user.id:
@@ -58,7 +59,7 @@ def detail(submission_id: int):
 
 
 @submissions_bp.route("/<int:submission_id>/rescan", methods=["POST"])
-@login_required
+@roles_required("developer", "administrator")
 def rescan(submission_id: int):
     sub = db.session.get(Submission, submission_id)
     if sub is None or sub.user_id != current_user.id:
@@ -78,7 +79,7 @@ def rescan(submission_id: int):
 
 
 @submissions_bp.route("/<int:submission_id>/delete", methods=["POST"])
-@login_required
+@roles_required("developer", "administrator")
 def delete(submission_id: int):
     sub = db.session.get(Submission, submission_id)
     if sub is None or sub.user_id != current_user.id:

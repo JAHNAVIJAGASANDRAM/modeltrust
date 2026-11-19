@@ -2,6 +2,7 @@
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, BooleanField, SubmitField
 from wtforms.validators import DataRequired, Email, EqualTo, Length, ValidationError
+from sqlalchemy import func
 from app.models.user import User
 
 
@@ -18,8 +19,8 @@ class RegistrationForm(FlaskForm):
     )
     password = PasswordField(
         "Password",
-        validators=[DataRequired(), Length(min=8)],
-        render_kw={"placeholder": "Min. 8 characters"},
+        validators=[DataRequired(), Length(min=8, max=128)],
+        render_kw={"placeholder": "8–128 characters"},
     )
     confirm_password = PasswordField(
         "Confirm Password",
@@ -29,11 +30,13 @@ class RegistrationForm(FlaskForm):
     submit = SubmitField("Create Account")
 
     def validate_username(self, field):
-        if User.query.filter_by(username=field.data).first():
+        field.data = field.data.strip()
+        if User.query.filter(func.lower(User.username) == field.data.lower()).first():
             raise ValidationError("Username already taken.")
 
     def validate_email(self, field):
-        if User.query.filter_by(email=field.data).first():
+        field.data = field.data.strip().lower()
+        if User.query.filter(func.lower(User.email) == field.data).first():
             raise ValidationError("Email already registered.")
 
 

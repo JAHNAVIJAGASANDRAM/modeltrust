@@ -1,10 +1,11 @@
 """Dashboard routes."""
 from flask import render_template, redirect, url_for
-from flask_login import login_required, current_user
+from flask_login import current_user
 from app.dashboard import dashboard_bp
 from app.models.submission import Submission
 from app.models.scan_result import ScanResult
 from app.extensions import db
+from app.auth.permissions import roles_required
 
 
 @dashboard_bp.route("/")
@@ -15,7 +16,7 @@ def index():
 
 
 @dashboard_bp.route("/dashboard")
-@login_required
+@roles_required("developer", "authorized_user", "administrator")
 def dashboard():
     submissions = (
         Submission.query.filter_by(user_id=current_user.id)

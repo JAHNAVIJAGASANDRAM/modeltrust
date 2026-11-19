@@ -29,11 +29,13 @@
             <i class="bi bi-grid me-1"></i>Dashboard
           </a>
         </li>
-        <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('submissions.new') }}">
-            <i class="bi bi-plus-circle me-1"></i>New Submission
-          </a>
-        </li>
+        {% if current_user.has_role('developer', 'administrator') %}
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('submissions.new') }}">
+              <i class="bi bi-plus-circle me-1"></i>New Submission
+            </a>
+          </li>
+        {% endif %}
         {% endif %}
       </ul>
       <ul class="navbar-nav ms-auto">
@@ -46,9 +48,12 @@
             <li><span class="dropdown-item-text text-muted small">{{ current_user.email }}</span></li>
             <li><hr class="dropdown-divider"></li>
             <li>
-              <a class="dropdown-item text-danger" href="{{ url_for('auth.logout') }}">
-                <i class="bi bi-box-arrow-right me-1"></i>Sign Out
-              </a>
+              <form method="POST" action="{{ url_for('auth.logout') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button class="dropdown-item text-danger" type="submit">
+                  <i class="bi bi-box-arrow-right me-1"></i>Sign Out
+                </button>
+              </form>
             </li>
           </ul>
         </li>

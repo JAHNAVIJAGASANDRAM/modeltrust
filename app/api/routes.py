@@ -1,10 +1,11 @@
 """REST API v1 routes."""
 from flask import jsonify, request, abort
-from flask_login import login_required, current_user
+from flask_login import current_user
 from app.api import api_bp
 from app.models.submission import Submission
 from app.models.scan_result import ScanResult
 from app.extensions import db
+from app.auth.permissions import roles_required
 
 
 def _submission_to_dict(sub: Submission) -> dict:
@@ -48,7 +49,7 @@ def _scan_to_dict(scan: ScanResult) -> dict:
 
 
 @api_bp.route("/submissions", methods=["GET"])
-@login_required
+@roles_required("developer", "authorized_user", "administrator")
 def list_submissions():
     subs = (
         Submission.query.filter_by(user_id=current_user.id)
@@ -59,7 +60,7 @@ def list_submissions():
 
 
 @api_bp.route("/submissions/<int:submission_id>", methods=["GET"])
-@login_required
+@roles_required("developer", "authorized_user", "administrator")
 def get_submission(submission_id: int):
     sub = db.session.get(Submission, submission_id)
     if sub is None or sub.user_id != current_user.id:
@@ -68,7 +69,7 @@ def get_submission(submission_id: int):
 
 
 @api_bp.route("/submissions/<int:submission_id>/scan", methods=["GET"])
-@login_required
+@roles_required("developer", "authorized_user", "administrator")
 def get_scan(submission_id: int):
     sub = db.session.get(Submission, submission_id)
     if sub is None or sub.user_id != current_user.id:
