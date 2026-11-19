@@ -153,6 +153,7 @@ document.addEventListener("DOMContentLoaded", () => {
           headers: {
             "Content-Type": "application/json",
             "X-Requested-With": "XMLHttpRequest",
+            "X-CSRFToken": form.querySelector('[name="csrf_token"]')?.value || "",
           },
           body: JSON.stringify({ repository_url: rawUrl }),
         });

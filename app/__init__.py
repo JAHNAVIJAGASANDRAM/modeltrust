@@ -26,7 +26,7 @@ def create_app(config_name: str | None = None) -> Flask:
     csrf.init_app(app)
 
     # Import models so Migrate sees them
-    from app.models import user, submission, scan_result  # noqa: F401
+    from app.models import user, submission, scan_result, report_access  # noqa: F401
 
     # Register blueprints
     from app.auth import auth_bp

@@ -68,6 +68,7 @@ def create_artifact_record(
     repo_name: str,
     repo_type: str = "repository",
     user_id: int | None = None,
+    auth_user_id: int | None = None,
     db_path: Path | str | None = None,
 ) -> int:
     """Insert a new artifact assessment record and return its primary key ID."""
@@ -81,8 +82,8 @@ def create_artifact_record(
             """
             INSERT INTO artifacts (
                 assessment_id, user_id, repository_url, platform, owner, repo_name,
-                repo_type, status, submitted_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                auth_user_id, repo_type, status, submitted_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 assessment_id,
@@ -91,6 +92,7 @@ def create_artifact_record(
                 platform,
                 owner,
                 repo_name,
+                auth_user_id,
                 repo_type,
                 "SCANNING",
                 utc_now_iso(),
@@ -369,26 +371,76 @@ def get_assessment_full(artifact_id: int, db_path: Path | str | None = None) -> 
         conn.close()
 
 
-def get_dashboard_summary(db_path: Path | str | None = None) -> dict[str, Any]:
-    """Return aggregate counts and recent security assessments for the Dashboard."""
+def list_artifact_ids(db_path: Path | str | None = None) -> list[int]:
+    """List assessment IDs without returning report or finding content."""
     conn = get_db_connection(db_path)
     try:
-        total = conn.execute("SELECT COUNT(*) AS c FROM artifacts").fetchone()["c"]
+        rows = conn.execute("SELECT id FROM artifacts ORDER BY id").fetchall()
+        return [int(row["id"]) for row in rows]
+    finally:
+        conn.close()
+
+
+def artifact_exists(artifact_id: int, db_path: Path | str | None = None) -> bool:
+    """Check artifact existence without returning any report content."""
+    conn = get_db_connection(db_path)
+    try:
+        return conn.execute("SELECT 1 FROM artifacts WHERE id = ?", (artifact_id,)).fetchone() is not None
+    finally:
+        conn.close()
+
+
+def get_artifact_auth_user_id(artifact_id: int, db_path: Path | str | None = None) -> int | None:
+    """Return the authenticated owner ID for an assessment, if assigned."""
+    conn = get_db_connection(db_path)
+    try:
+        row = conn.execute(
+            "SELECT auth_user_id FROM artifacts WHERE id = ?", (artifact_id,)
+        ).fetchone()
+        return int(row["auth_user_id"]) if row and row["auth_user_id"] is not None else None
+    finally:
+        conn.close()
+
+
+def get_dashboard_summary(
+    db_path: Path | str | None = None,
+    artifact_ids: list[int] | None = None,
+) -> dict[str, Any]:
+    """Return aggregate counts and recent assessments, optionally scoped to visible IDs."""
+    conn = get_db_connection(db_path)
+    try:
+        if artifact_ids is not None and not artifact_ids:
+            return {
+                "stats": {"total": 0, "approved": 0, "review": 0, "rejected": 0, "registry_count": 0},
+                "recent_assessments": [],
+                "module_stats": {},
+            }
+        id_placeholders = "" if artifact_ids is None else ",".join("?" for _ in artifact_ids)
+        id_filter = "" if artifact_ids is None else f" WHERE id IN ({id_placeholders})"
+        artifact_params = [] if artifact_ids is None else artifact_ids
+        dependent_filter = "" if artifact_ids is None else f" WHERE artifact_id IN ({id_placeholders})"
+        total = conn.execute(f"SELECT COUNT(*) AS c FROM artifacts{id_filter}", artifact_params).fetchone()["c"]
         approved = conn.execute(
-            "SELECT COUNT(*) AS c FROM policy_decisions WHERE decision = 'APPROVE'"
+            "SELECT COUNT(*) AS c FROM policy_decisions" + dependent_filter + (" AND" if artifact_ids is not None else " WHERE") + " decision = 'APPROVE'",
+            artifact_params,
         ).fetchone()["c"]
         review = conn.execute(
-            "SELECT COUNT(*) AS c FROM policy_decisions WHERE decision = 'REVIEW'"
+            "SELECT COUNT(*) AS c FROM policy_decisions" + dependent_filter + (" AND" if artifact_ids is not None else " WHERE") + " decision = 'REVIEW'",
+            artifact_params,
         ).fetchone()["c"]
         rejected = conn.execute(
-            "SELECT COUNT(*) AS c FROM policy_decisions WHERE decision = 'REJECT'"
+            "SELECT COUNT(*) AS c FROM policy_decisions" + dependent_filter + (" AND" if artifact_ids is not None else " WHERE") + " decision = 'REJECT'",
+            artifact_params,
         ).fetchone()["c"]
         registry_count = conn.execute(
-            "SELECT COUNT(*) AS c FROM trusted_registry"
+            "SELECT COUNT(*) AS c FROM trusted_registry" + dependent_filter,
+            artifact_params,
         ).fetchone()["c"]
 
+        recent_filter = "" if artifact_ids is None else f"WHERE a.id IN ({id_placeholders})"
+
         recent_rows = conn.execute(
-            """
+            f"""
             SELECT
                 a.id,
                 a.assessment_id,
@@ -409,17 +461,21 @@ def get_dashboard_summary(db_path: Path | str | None = None) -> dict[str, Any]:
             LEFT JOIN policy_decisions pd ON pd.artifact_id = a.id
             LEFT JOIN certificates c ON c.artifact_id = a.id
             LEFT JOIN trusted_registry tr ON tr.artifact_id = a.id
+            {recent_filter}
             ORDER BY a.id DESC
             LIMIT 50
-            """
+            """,
+            artifact_params,
         ).fetchall()
 
         module_stats_rows = conn.execute(
-            """
+            f"""
             SELECT module_name, status, COUNT(*) AS cnt
             FROM scan_results
+            {dependent_filter}
             GROUP BY module_name, status
-            """
+            """,
+            artifact_params,
         ).fetchall()
         module_stats: dict[str, dict[str, int]] = {}
         for row in module_stats_rows:

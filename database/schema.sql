@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS artifacts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     assessment_id TEXT NOT NULL UNIQUE,
     user_id INTEGER,
+    auth_user_id INTEGER,
     repository_url TEXT NOT NULL,
     platform TEXT NOT NULL,
     owner TEXT NOT NULL,

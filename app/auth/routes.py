@@ -1,7 +1,7 @@
 """Auth routes — register, login, logout."""
 from urllib.parse import urlsplit
 
-from flask import render_template, redirect, url_for, flash, request, session
+from flask import render_template, redirect, url_for, flash, request, session, current_app
 from flask_login import login_user, logout_user, login_required, current_user
 from sqlalchemy.exc import IntegrityError
 from app.auth import auth_bp
@@ -11,10 +11,16 @@ from app.extensions import db
 from sqlalchemy import func
 
 
+def _authenticated_landing_url() -> str:
+    """Select the dashboard endpoint used by the active Flask application."""
+    endpoint = "dashboard.index" if "dashboard.index" in current_app.view_functions else "dashboard"
+    return url_for(endpoint)
+
+
 @auth_bp.route("/register", methods=["GET", "POST"])
 def register():
     if current_user.is_authenticated:
-        return redirect(url_for("dashboard.index"))
+        return redirect(_authenticated_landing_url())
     form = RegistrationForm()
     if form.validate_on_submit():
         user = User(
@@ -38,7 +44,7 @@ def register():
 @auth_bp.route("/login", methods=["GET", "POST"])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for("dashboard.index"))
+        return redirect(_authenticated_landing_url())
     form = LoginForm()
     if form.validate_on_submit():
         email = form.email.data.strip().lower()
@@ -49,7 +55,7 @@ def login():
             login_user(user, remember=form.remember.data)
             next_page = _safe_next_url(request.args.get("next"))
             flash(f"Welcome back, {user.username}!", "success")
-            return redirect(next_page or url_for("dashboard.index"))
+            return redirect(next_page or _authenticated_landing_url())
         flash("Invalid email or password.", "danger")
     return render_template("auth/login.html", form=form, title="Sign In")
 

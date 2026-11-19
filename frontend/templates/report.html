@@ -191,5 +191,55 @@
     </div>
   </div>
 </div>
+
+{% if current_user.has_role('administrator') %}
+<div class="card mt-card mt-4 border-primary-subtle">
+  <div class="card-header border-secondary-subtle fw-semibold small text-uppercase text-secondary">
+    <i class="bi bi-people me-1 text-primary"></i>Report Access (Administrator)
+  </div>
+  <div class="card-body">
+    <form method="POST" action="{{ url_for('manage_report_permission', artifact_id=art.id) }}" class="row g-2 align-items-end mb-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="col-md-8">
+        <label class="form-label small" for="reportAccessEmail">Account</label>
+        <select class="form-select" name="email" id="reportAccessEmail" required>
+          <option value="">Choose an account</option>
+          {% for account in user_options %}
+            <option value="{{ account.email }}">{{ account.username }} · {{ account.role.replace('_', ' ')|title }} ({{ account.email }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-4 d-flex gap-2">
+        <button class="btn btn-sm btn-primary" type="submit" name="action" value="grant">Grant access</button>
+      </div>
+    </form>
+    {% if report_permissions %}
+      <div class="table-responsive">
+        <table class="table table-dark table-sm align-middle mb-0">
+          <thead><tr><th>Account</th><th>Granted by</th><th>Since</th><th></th></tr></thead>
+          <tbody>
+            {% for grant in report_permissions %}
+            <tr>
+              <td>{{ grant.user.username }} <span class="text-secondary">({{ grant.user.email }})</span></td>
+              <td>{{ grant.granted_by.username }}</td>
+              <td>{{ grant.created_at.strftime('%Y-%m-%d %H:%M UTC') }}</td>
+              <td>
+                <form method="POST" action="{{ url_for('manage_report_permission', artifact_id=art.id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <input type="hidden" name="email" value="{{ grant.user.email }}">
+                  <button class="btn btn-xs btn-outline-danger" type="submit" name="action" value="revoke">Revoke</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <p class="small text-secondary mb-0">No additional accounts have access to this report.</p>
+    {% endif %}
+  </div>
+</div>
+{% endif %}
 {% endif %}
 {% endblock %}

@@ -60,12 +60,24 @@
           <small class="text-secondary">{% block page_subheading %}{{ app_subtitle }}{% endblock %}</small>
         </div>
         <div class="d-flex align-items-center gap-2">
-          <a href="{{ url_for('index') }}" class="btn btn-sm btn-primary">
-            <i class="bi bi-plus-circle me-1"></i>New Scan
-          </a>
-          <a href="{{ url_for('registry') }}" class="btn btn-sm btn-outline-success">
-            <i class="bi bi-patch-check me-1"></i>Trusted Registry
-          </a>
+          {% if current_user.is_authenticated %}
+            <span class="small text-secondary">{{ current_user.username }} · {{ current_user.role.replace('_', ' ')|title }}</span>
+            {% if current_user.has_role('developer', 'administrator') %}
+              <a href="{{ url_for('index') }}" class="btn btn-sm btn-primary">
+                <i class="bi bi-plus-circle me-1"></i>New Scan
+              </a>
+            {% endif %}
+            <a href="{{ url_for('registry') }}" class="btn btn-sm btn-outline-success">
+              <i class="bi bi-patch-check me-1"></i>Trusted Registry
+            </a>
+            <form method="POST" action="{{ url_for('auth.logout') }}" class="d-inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="btn btn-sm btn-outline-light" type="submit">Sign out</button>
+            </form>
+          {% else %}
+            <a href="{{ url_for('auth.login') }}" class="btn btn-sm btn-outline-light">Sign in</a>
+            <a href="{{ url_for('auth.register') }}" class="btn btn-sm btn-primary">Register</a>
+          {% endif %}
         </div>
       </header>
 

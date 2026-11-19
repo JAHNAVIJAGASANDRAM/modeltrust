@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+import os
 
 from flask import (
     Flask,
@@ -21,11 +22,28 @@ from flask import (
     send_file,
     url_for,
 )
+from flask_login import current_user
+from flask_wtf.csrf import generate_csrf
+from jinja2 import ChoiceLoader, FileSystemLoader
+from sqlalchemy import func
 
 from config import Config
+from app.config import config as auth_config
+from app.extensions import db as auth_db, login_manager, migrate, csrf
+from app.auth import auth_bp
+from app.auth.permissions import roles_required
+from app.models import User, ReportPermission
+from app.reports.authorization import (
+    grant_report_access,
+    require_artifact_access,
+    revoke_report_access,
+    visible_artifact_ids,
+    write_report_audit,
+)
 from database.db import (
     create_artifact_record,
     get_assessment_full,
+    artifact_exists,
     get_dashboard_summary,
     init_db,
     save_certificate_record,
@@ -66,7 +84,24 @@ app = Flask(
     template_folder=str(Config.TEMPLATE_DIR),
     static_folder=str(Config.STATIC_DIR),
 )
-app.config["SECRET_KEY"] = Config.SECRET_KEY
+if os.environ.get("FLASK_ENV") == "production" and not os.environ.get("SECRET_KEY"):
+    raise RuntimeError("SECRET_KEY must be set when running the production configuration.")
+app.config.from_object(
+    auth_config.get(os.environ.get("FLASK_ENV", "development"), auth_config["default"])
+)
+auth_db.init_app(app)
+migrate.init_app(app, auth_db)
+login_manager.init_app(app)
+csrf.init_app(app)
+app.jinja_loader = ChoiceLoader(
+    [app.jinja_loader, FileSystemLoader(str(Config.BASE_DIR / "app" / "templates"))]
+)
+app.register_blueprint(auth_bp, url_prefix="/auth")
+
+
+@app.context_processor
+def inject_csrf_token():
+    return {"csrf_token": generate_csrf}
 
 # Ensure storage folders, SQLite schema, and organizational signing keys exist on startup
 Config.ensure_directories()
@@ -125,7 +160,11 @@ def _safe_run_module(module_name: str, tool_name: str, fn, *args, **kwargs) -> d
         }
 
 
-def run_full_assessment(raw_url: str, policy_overrides: dict[str, Any] | None = None) -> dict[str, Any]:
+def run_full_assessment(
+    raw_url: str,
+    policy_overrides: dict[str, Any] | None = None,
+    auth_user_id: int | None = None,
+) -> dict[str, Any]:
     """
     Execute the complete 16-step ModelTrust assessment pipeline for a submitted repository URL.
     Returns the full assessment dictionary loaded from SQLite.
@@ -141,6 +180,7 @@ def run_full_assessment(raw_url: str, policy_overrides: dict[str, Any] | None = 
         owner=parsed["owner"],
         repo_name=parsed["repo"],
         repo_type=parsed["repo_type"],
+        auth_user_id=auth_user_id,
     )
 
     try:
@@ -306,9 +346,10 @@ def inject_globals() -> dict[str, Any]:
 
 
 @app.route("/", methods=["GET"])
+@roles_required("developer", "authorized_user", "administrator")
 def index():
     """Page 1: Home / Repository Submission."""
-    summary = get_dashboard_summary()
+    summary = get_dashboard_summary(artifact_ids=visible_artifact_ids())
     tools = get_scanner_tool_status()
     return render_template(
         "index.html",
@@ -320,6 +361,7 @@ def index():
 
 
 @app.route("/analyze", methods=["POST"])
+@roles_required("developer", "administrator")
 def analyze():
     """Validate and execute security assessment for a submitted GitHub or Hugging Face repository."""
     is_json = request.is_json or request.headers.get("X-Requested-With") == "XMLHttpRequest"
@@ -335,7 +377,7 @@ def analyze():
         return redirect(url_for("index"))
 
     try:
-        bundle = run_full_assessment(raw_url)
+        bundle = run_full_assessment(raw_url, auth_user_id=current_user.id)
         artifact_id = bundle["artifact"]["id"]
         decision = (bundle.get("policy_decision") or {}).get("decision", "REVIEW")
         if is_json:
@@ -365,9 +407,10 @@ def analyze():
 
 
 @app.route("/dashboard", methods=["GET"])
+@roles_required("developer", "authorized_user", "administrator")
 def dashboard():
     """Page 2: Security Assessment Dashboard."""
-    summary = get_dashboard_summary()
+    summary = get_dashboard_summary(artifact_ids=visible_artifact_ids())
     tools = get_scanner_tool_status()
     return render_template(
         "dashboard.html",
@@ -380,9 +423,10 @@ def dashboard():
 
 
 @app.route("/analysis", methods=["GET"])
+@roles_required("developer", "authorized_user", "administrator")
 def analysis_latest():
     """Redirect to the most recent security analysis, or show empty state."""
-    summary = get_dashboard_summary()
+    summary = get_dashboard_summary(artifact_ids=visible_artifact_ids())
     recent = summary["recent_assessments"]
     if recent:
         return redirect(url_for("analysis_detail", artifact_id=recent[0]["id"]))
@@ -390,8 +434,11 @@ def analysis_latest():
 
 
 @app.route("/analysis/<int:artifact_id>", methods=["GET"])
+@roles_required("developer", "authorized_user", "administrator")
 def analysis_detail(artifact_id: int):
     """Page 3: Detailed Security Analysis per module."""
+    if not require_artifact_access(artifact_id, "analysis_view"):
+        abort(404)
     bundle = get_assessment_full(artifact_id)
     if not bundle:
         abort(404)
@@ -399,9 +446,10 @@ def analysis_detail(artifact_id: int):
 
 
 @app.route("/report", methods=["GET"])
+@roles_required("developer", "authorized_user", "administrator")
 def report_latest():
     """Redirect to the most recent assessment report, or show empty state."""
-    summary = get_dashboard_summary()
+    summary = get_dashboard_summary(artifact_ids=visible_artifact_ids())
     recent = summary["recent_assessments"]
     if recent:
         return redirect(url_for("report_detail", artifact_id=recent[0]["id"]))
@@ -409,17 +457,55 @@ def report_latest():
 
 
 @app.route("/report/<int:artifact_id>", methods=["GET"])
+@roles_required("developer", "authorized_user", "administrator")
 def report_detail(artifact_id: int):
     """Page 4: Assessment Report overview and PDF download."""
+    if not require_artifact_access(artifact_id, "report_view"):
+        abort(404)
     bundle = get_assessment_full(artifact_id)
     if not bundle:
         abort(404)
-    return render_template("report.html", active_page="report", bundle=bundle)
+    permissions = []
+    users = []
+    if current_user.has_role("administrator"):
+        permissions = ReportPermission.query.filter_by(artifact_id=artifact_id).order_by(
+            ReportPermission.created_at.desc()
+        ).all()
+        users = User.query.order_by(User.username.asc()).all()
+    return render_template(
+        "report.html", active_page="report", bundle=bundle,
+        report_permissions=permissions, user_options=users,
+    )
+
+
+@app.route("/report/<int:artifact_id>/permissions", methods=["POST"])
+@roles_required("administrator")
+def manage_report_permission(artifact_id: int):
+    """Administrators grant or revoke access to one report for a selected account."""
+    if not artifact_exists(artifact_id):
+        abort(404)
+    action = request.form.get("action", "").strip().lower()
+    email = request.form.get("email", "").strip().lower()
+    target = User.query.filter(func.lower(User.email) == email).first() if email else None
+    if target is None:
+        abort(404)
+    if action == "grant":
+        changed = grant_report_access(artifact_id, target.id)
+        flash("Report access granted." if changed else "That account already has report access.", "success")
+    elif action == "revoke":
+        changed = revoke_report_access(artifact_id, target.id)
+        flash("Report access revoked." if changed else "That account had no report grant.", "info")
+    else:
+        abort(400)
+    return redirect(url_for("report_detail", artifact_id=artifact_id))
 
 
 @app.route("/report/<int:artifact_id>/download", methods=["GET"])
+@roles_required("developer", "authorized_user", "administrator")
 def download_report(artifact_id: int):
     """Download generated ReportLab PDF report (generates on-demand if missing)."""
+    if not require_artifact_access(artifact_id):
+        abort(404)
     bundle = get_assessment_full(artifact_id)
     if not bundle:
         abort(404)
@@ -437,6 +523,7 @@ def download_report(artifact_id: int):
         )
         report_path = Path(info["report_path"])
 
+    write_report_audit("pdf_download", artifact_id)
     return send_file(
         str(report_path),
         as_attachment=True,
@@ -446,8 +533,11 @@ def download_report(artifact_id: int):
 
 
 @app.route("/sbom/<int:artifact_id>/download", methods=["GET"])
+@roles_required("developer", "authorized_user", "administrator")
 def download_sbom(artifact_id: int):
     """Download generated CycloneDX JSON SBOM file if available."""
+    if not require_artifact_access(artifact_id):
+        abort(404)
     bundle = get_assessment_full(artifact_id)
     if not bundle:
         abort(404)
@@ -459,6 +549,7 @@ def download_sbom(artifact_id: int):
         return redirect(url_for("analysis_detail", artifact_id=artifact_id))
 
     sbom_path = Path(sbom_path_str)
+    write_report_audit("sbom_download", artifact_id)
     return send_file(
         str(sbom_path),
         as_attachment=True,
@@ -468,6 +559,7 @@ def download_sbom(artifact_id: int):
 
 
 @app.route("/registry", methods=["GET"])
+@roles_required("developer", "authorized_user", "administrator")
 def registry():
     """Page 5: Trusted AI Artifact Registry."""
     query = request.args.get("q", "").strip()
@@ -481,6 +573,7 @@ def registry():
 
 
 @app.route("/registry/<int:artifact_id>/verify", methods=["POST"])
+@roles_required("developer", "administrator")
 def verify_registry_artifact(artifact_id: int):
     """Re-verify SHA-256 hash integrity and RSA digital signature for a registered artifact."""
     is_json = request.is_json or request.headers.get("X-Requested-With") == "XMLHttpRequest"
@@ -522,7 +615,10 @@ def api_health():
 
 
 @app.route("/api/assessments/<int:artifact_id>", methods=["GET"])
+@roles_required("developer", "authorized_user", "administrator")
 def api_assessment_detail(artifact_id: int):
+    if not require_artifact_access(artifact_id, "analysis_view"):
+        return jsonify({"error": "Assessment not found"}), 404
     bundle = get_assessment_full(artifact_id)
     if not bundle:
         return jsonify({"error": "Assessment not found"}), 404

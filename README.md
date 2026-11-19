@@ -123,9 +123,9 @@ Then open **http://127.0.0.1:5000** in your browser.
 
 The SQLite database (`database/modeltrust.db`), storage directories, and organizational RSA-2048 signing keys (`storage/certificates/keys/`) are automatically initialized on first startup.
 
-### Authentication for the Flask application
+### Authentication and report access
 
-The authenticated Flask application is launched by `python run.py`. Before its first run, apply database migrations:
+The full assessment application (`python app.py`) and authenticated submission application (`python run.py`) use the same account store. Before running either after upgrading, apply the authentication database migrations:
 
 ```bash
 flask --app run.py db upgrade
@@ -133,6 +133,8 @@ python run.py
 ```
 
 New accounts receive the **Developer** role. To assign an existing account another role from a trusted server shell, use `flask --app run.py set-user-role <email> <developer|authorized_user|administrator>`. Registration cannot choose a privileged role. Set a strong `SECRET_KEY` in the server environment; production uses secure session cookies and requires HTTPS. The role migration keeps legacy administrator flags intact.
+
+For the full assessment application's report ownership field, apply `database/migrations/002_report_authorization.sql` once to the configured `MODELTRUST_DB_PATH` database (default: `database/modeltrust.db`) after taking a backup. Startup does not apply this migration. Existing assessments without an authenticated owner are administrator-only until access is explicitly granted. Report grants and report access audit events are stored in the authenticated account database.
 
 ---
 

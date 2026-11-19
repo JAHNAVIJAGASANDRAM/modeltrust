@@ -23,6 +23,7 @@
         </div>
 
         <form id="analyzeForm" action="{{ url_for('analyze') }}" method="POST" novalidate>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <label for="repoUrlInput" class="form-label fw-semibold small text-uppercase text-secondary">
             Repository URL (GitHub or Hugging Face)
           </label>
